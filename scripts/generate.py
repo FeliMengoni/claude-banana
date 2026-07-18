@@ -100,8 +100,11 @@ def generate_with_genai(prompt, model_name, aspect_ratio, image_size, output_pat
     generation_config = {
         "response_modalities": ["IMAGE"],
     }
-    if image_size:
-        generation_config["image_size"] = image_size.upper()
+    # NOTE: the live v1beta API currently rejects "image_size"/"imageSize" inside
+    # generationConfig ("Cannot find field"), for both gemini-3.1-flash-image-preview
+    # and gemini-2.5-flash-image. Resolution/aspect ratio must be requested via the
+    # prompt text itself instead (see knowledge/prompt-formula.md skeletons). Left the
+    # --size CLI flag in place for forward-compat in case the API adds support later.
 
     response = model.generate_content(
         prompt,
@@ -139,8 +142,8 @@ def generate_with_urllib(prompt, model_name, aspect_ratio, image_size, output_pa
             "responseModalities": ["IMAGE"],
         },
     }
-    if image_size:
-        payload["generationConfig"]["imageSize"] = image_size.upper()
+    # NOTE: see matching comment in generate_with_genai -- the live API rejects
+    # "imageSize" inside generationConfig, so it's intentionally not sent.
 
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
