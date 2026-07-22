@@ -84,8 +84,10 @@ def edit_with_genai(image_path, instruction, model_name, image_size, output_path
     generation_config = {
         "response_modalities": ["IMAGE"],
     }
-    if image_size:
-        generation_config["image_size"] = image_size.upper()
+    # NOTE: the live v1beta API currently rejects "image_size"/"imageSize" inside
+    # generationConfig ("Cannot find field"), same issue documented in generate.py.
+    # Left the --size CLI flag in place for forward-compat in case the API adds
+    # support later.
 
     response = model.generate_content(
         [
@@ -134,8 +136,7 @@ def edit_with_urllib(image_path, instruction, model_name, image_size, output_pat
             "responseModalities": ["IMAGE"],
         },
     }
-    if image_size:
-        payload["generationConfig"]["imageSize"] = image_size.upper()
+    # NOTE: see edit_with_genai -- the live v1beta API rejects "imageSize" here too.
 
     data = json.dumps(payload).encode("utf-8")
     req = urllib.request.Request(
