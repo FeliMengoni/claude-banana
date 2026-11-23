@@ -86,7 +86,7 @@ def load_template(template_path, variables):
     return prompt
 
 
-def generate_with_genai(prompt, model_name, aspect_ratio, image_size, output_path):
+def generate_with_genai(prompt, model_name, aspect_ratio, image_size, output_path, refs=()):
     """Generate image using google-generativeai library."""
     api_key = load_api_key()
     if not api_key:
@@ -106,8 +106,15 @@ def generate_with_genai(prompt, model_name, aspect_ratio, image_size, output_pat
     # prompt text itself instead (see knowledge/prompt-formula.md skeletons). Left the
     # --size CLI flag in place for forward-compat in case the API adds support later.
 
+    # Reference images (--ref) go before the prompt, in order, so the prompt can say
+    # "use the first reference image for ...".
+    contents = prompt
+    if refs:
+        from PIL import Image
+        contents = [Image.open(r) for r in refs] + [prompt]
+
     response = model.generate_content(
-        prompt,
+        contents,
         generation_config=generation_config,
     )
 
@@ -127,7 +134,7 @@ def generate_with_genai(prompt, model_name, aspect_ratio, image_size, output_pat
     sys.exit(1)
 
 
-def generate_with_urllib(prompt, model_name, aspect_ratio, image_size, output_path):
+def generate_with_urllib(prompt, model_name, aspect_ratio, image_size, output_path, refs=()):
     """Generate image using stdlib urllib (fallback)."""
     api_key = load_api_key()
     if not api_key:
@@ -136,8 +143,15 @@ def generate_with_urllib(prompt, model_name, aspect_ratio, image_size, output_pa
 
     url = f"https://generativelanguage.googleapis.com/v1beta/models/{model_name}:generateContent?key={api_key}"
 
+    parts = []
+    for r in refs:
+        mime = "image/png" if str(r).lower().endswith(".png") else "image/jpeg"
+        with open(r, "rb") as f:
+            parts.append({"inlineData": {"mimeType": mime, "data": base64.b64encode(f.read()).decode("ascii")}})
+    parts.append({"text": prompt})
+
     payload = {
-        "contents": [{"parts": [{"text": prompt}]}],
+        "contents": [{"parts": parts}],
         "generationConfig": {
             "responseModalities": ["IMAGE"],
         },
@@ -211,6 +225,12 @@ def main():
         "--output",
         help="Output file path (default: generated_TIMESTAMP.png)",
     )
+    parser.add_argument(
+        "--ref",
+        action="append",
+        default=[],
+        help="Reference image sent with the prompt (repeatable, in order)",
+    )
 
     args = parser.parse_args()
 
@@ -236,10 +256,10 @@ def main():
 
     # Generate
     if HAS_GENAI:
-        generate_with_genai(prompt, args.model, args.aspect, args.size, output_path)
+        generate_with_genai(prompt, args.model, args.aspect, args.size, output_path, args.ref)
     else:
         print("Note: google-generativeai not installed, using urllib fallback.")
-        generate_with_urllib(prompt, args.model, args.aspect, args.size, output_path)
+        generate_with_urllib(prompt, args.model, args.aspect, args.size, output_path, args.ref)
 
     print(f"Image saved to: {output_path}")
 
